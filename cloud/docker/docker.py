@@ -50,6 +50,10 @@ options:
     description:
       - Command used to match and launch containers.
     default: null
+  entrypoint:
+    description:
+      - Entrypoint used to match and launch containers.
+    default: null
   name:
     description:
       - Name used to match and uniquely name launched containers. Explicit names
@@ -865,6 +869,18 @@ class DockerManager(object):
                     differing.append(container)
                     continue
 
+            # ENTRYPOINT
+
+            expected_entrypoint = self.module.params.get('entrypoint')
+            if expected_entrypoint:
+                expected_entrypoint = shlex.split(expected_entrypoint)
+                actual_entrypoint = container["Config"]["Entrypoint"]
+
+                if actual_entrypoint != expected_entrypoint:
+                    self.reload_reasons.append('entrypoint ({0} => {1})'.format(actual_entrypoint, expected_entrypoint))
+                    differing.append(container)
+                    continue
+
             # EXPOSED PORTS
             expected_exposed_ports = set((image['ContainerConfig']['ExposedPorts'] or {}).keys())
             for p in (self.exposed_ports or []):
@@ -1179,6 +1195,7 @@ class DockerManager(object):
     def create_containers(self, count=1):
         params = {'image':        self.module.params.get('image'),
                   'command':      self.module.params.get('command'),
+                  'entrypoint':   self.module.params.get('entrypoint'),
                   'ports':        self.exposed_ports,
                   'volumes':      self.volumes,
                   'mem_limit':    _human_to_bytes(self.module.params.get('memory_limit')),
@@ -1190,6 +1207,9 @@ class DockerManager(object):
                   'stdin_open':   self.module.params.get('stdin_open'),
                   'tty':          self.module.params.get('tty'),
                   }
+
+        if params['entrypoint']:
+            params['entrypoint'] = shlex.split(params['entrypoint'])
 
         def do_create(count, params):
             results = []
@@ -1399,6 +1419,7 @@ def main():
             image           = dict(required=True),
             pull            = dict(required=False, default='missing', choices=['missing', 'always']),
             command         = dict(required=False, default=None),
+            entrypoint      = dict(required=False, default=None),
             expose          = dict(required=False, default=None, type='list'),
             ports           = dict(required=False, default=None, type='list'),
             publish_all_ports = dict(default=False, type='bool'),
